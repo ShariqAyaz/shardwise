@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from prefect import flow, task
-from prefect.tasks import task_input_hash
-from datetime import timedelta
 import yaml
 
 # Import pipeline scripts
@@ -28,9 +26,7 @@ from scripts.export_annotation import AnnotationExporter
     name="extract_text",
     description="Extract text from raw data files",
     retries=3,
-    retry_delay_seconds=60,
-    cache_key_fn=task_input_hash,
-    cache_expiration=timedelta(hours=24)
+    retry_delay_seconds=60
 )
 def extract_text_task(config_path: str) -> Dict:
     """Task to extract text from raw files"""

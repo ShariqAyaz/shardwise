@@ -57,6 +57,16 @@ class TextChunker:
         """Chunk text by sentences with size constraints"""
         sentences = self.split_into_sentences(text)
         
+        # If entire text is smaller than min_size, return it as a single chunk
+        # (as long as it's not too small - at least 50 words)
+        total_words = self.count_words(text)
+        if total_words < min_size:
+            if total_words >= 50:  # Minimum reasonable chunk size
+                return [text]
+            else:
+                # Text too small, return empty
+                return []
+        
         chunks = []
         current_chunk = []
         current_word_count = 0
@@ -97,6 +107,16 @@ class TextChunker:
     def chunk_by_paragraph(self, text: str, min_size: int, max_size: int, overlap: int) -> List[str]:
         """Chunk text by paragraphs with size constraints"""
         paragraphs = self.split_into_paragraphs(text)
+        
+        # If entire text is smaller than min_size, return it as a single chunk
+        # (as long as it's not too small - at least 50 words)
+        total_words = self.count_words(text)
+        if total_words < min_size:
+            if total_words >= 50:  # Minimum reasonable chunk size
+                return [text]
+            else:
+                # Text too small, return empty
+                return []
         
         chunks = []
         current_chunk = []
