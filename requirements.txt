@@ -1,0 +1,42 @@
+# Core extraction libraries
+pypdf
+pdfminer.six
+python-docx
+trafilatura
+beautifulsoup4
+lxml
+
+# Text processing and cleaning
+ftfy
+langdetect
+clean-text
+regex
+
+# Deduplication
+datasketch
+
+# Data storage and processing
+pyarrow
+pandas
+datasets
+numpy
+
+# Workflow orchestration
+prefect
+
+# Label Studio integration
+label-studio-sdk
+requests
+
+# Utilities
+pyyaml
+tqdm
+python-dotenv
+
+# Optional: Quality scoring
+textstat
+
+# Optional: Advanced chunking
+nltk
+spacy
+

@@ -1,0 +1,64 @@
+<View>
+  <Header value="LLM Instruction Fine-tuning Annotation"/>
+  
+  <!-- Display the text chunk to annotate -->
+  <Text name="text" value="$text"/>
+  
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border: 1px solid #ccc;">
+    <Header value="Create Instruction-Response Pair"/>
+    
+    <!-- Instruction field -->
+    <Header value="Instruction (what task does this text represent?)"/>
+    <TextArea name="instruction" toName="text" 
+              placeholder="e.g., Explain the concept of..., Summarise the following..., Answer this question..."
+              maxSubmissions="1" rows="3" editable="true"/>
+    
+    <!-- Input field (optional context) -->
+    <Header value="Input (optional - additional context for the instruction)"/>
+    <TextArea name="input_context" toName="text" 
+              placeholder="Optional: any additional context or input needed"
+              maxSubmissions="1" rows="2" editable="true" required="false"/>
+    
+    <!-- Response field -->
+    <Header value="Response (the answer or output based on the text)"/>
+    <TextArea name="response" toName="text" 
+              placeholder="Write the expected response or output here..."
+              maxSubmissions="1" rows="5" editable="true"/>
+  </View>
+  
+  <!-- Niche/Category Classification -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border: 1px solid #ccc;">
+    <Header value="Categorisation"/>
+    
+    <Choices name="niche" toName="text" choice="single" showInline="true">
+      <Choice value="general"/>
+      <Choice value="finance"/>
+      <Choice value="health"/>
+      <Choice value="technology"/>
+      <Choice value="science"/>
+      <Choice value="other"/>
+    </Choices>
+  </View>
+  
+  <!-- Quality Rating -->
+  <View style="box-shadow: 2px 2px 5px #999; padding: 20px; margin-top: 2em; border: 1px solid #ccc;">
+    <Header value="Quality Assessment"/>
+    
+    <Rating name="quality" toName="text" maxRating="5" icon="star" size="medium"/>
+    
+    <Choices name="issues" toName="text" choice="multiple" showInline="false">
+      <Choice value="low_quality_text"/>
+      <Choice value="unclear_meaning"/>
+      <Choice value="too_short"/>
+      <Choice value="too_long"/>
+      <Choice value="contains_errors"/>
+      <Choice value="not_useful_for_training"/>
+    </Choices>
+    
+    <!-- Additional notes -->
+    <TextArea name="notes" toName="text" 
+              placeholder="Any additional notes or comments..."
+              maxSubmissions="1" rows="2" editable="true" required="false"/>
+  </View>
+</View>
+

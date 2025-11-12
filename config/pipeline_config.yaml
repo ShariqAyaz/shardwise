@@ -1,0 +1,101 @@
+# ShardWise Pipeline Configuration
+
+# Paths
+paths:
+  raw_data: "raw_data"
+  intermediate: "intermediate"
+  dataset: "dataset"
+  
+# Text Extraction Settings
+extraction:
+  pdf:
+    method: "pypdf"  # Options: pypdf, pdfminer
+    extract_images: false
+  html:
+    method: "trafilatura"  # Options: trafilatura, beautifulsoup
+    extract_links: false
+  encoding: "utf-8"
+
+# Cleaning and Normalisation Settings
+cleaning:
+  remove_urls: true
+  remove_emails: true
+  remove_phone_numbers: true
+  normalise_whitespace: true
+  normalise_quotes: true
+  fix_encoding: true
+  min_line_length: 10
+  languages:
+    - "en"  # Filter for English only, add more as needed
+  language_confidence_threshold: 0.8
+
+# Chunking Settings
+chunking:
+  method: "sentence"  # Options: sentence, paragraph, fixed
+  min_chunk_size: 500  # words
+  max_chunk_size: 2000  # words
+  overlap: 100  # words
+  preserve_sentence_boundaries: true
+
+# Deduplication Settings
+deduplication:
+  exact_dedup: true
+  near_dedup: true
+  minhash:
+    num_perm: 128
+    threshold: 0.8
+  min_text_length: 50  # characters
+
+# Quality Filtering Settings
+quality:
+  min_words: 20
+  max_words: 10000
+  min_unique_words_ratio: 0.3
+  max_repetition_ratio: 0.5
+  min_alpha_ratio: 0.7
+  calculate_readability: true
+  min_readability_score: 0  # Flesch reading ease, 0-100
+
+# Sharding Settings
+sharding:
+  format: "parquet"
+  max_shard_size_mb: 500
+  compression: "snappy"  # Options: snappy, gzip, brotli, none
+
+# Annotation Export Settings
+annotation:
+  format: "jsonl"
+  niches:
+    - name: "general"
+      keywords: []
+    - name: "finance"
+      keywords: ["financial", "investment", "trading", "market", "stock"]
+    - name: "health"
+      keywords: ["medical", "health", "disease", "treatment", "patient"]
+    - name: "technology"
+      keywords: ["software", "programming", "algorithm", "computer", "AI"]
+    - name: "science"
+      keywords: ["research", "experiment", "theory", "hypothesis", "data"]
+  auto_categorise: true
+
+# Label Studio Settings
+labelstudio:
+  url: "http://localhost:8080"
+  api_key: ""  # Set via environment variable LABELSTUDIO_API_KEY
+  project_name: "ShardWise Annotation"
+  project_description: "LLM instruction fine-tuning annotation project"
+  sampling_rate: 1.0  # Fraction of data to send for annotation (0.0-1.0)
+
+# Prefect Settings
+prefect:
+  log_level: "INFO"
+  max_retries: 3
+  retry_delay_seconds: 60
+  parallel_workers: 4
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/pipeline.log"
+
