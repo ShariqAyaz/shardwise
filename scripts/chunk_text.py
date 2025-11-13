@@ -15,6 +15,15 @@ from datetime import datetime
 import yaml
 from tqdm import tqdm
 
+# Import guardrails
+try:
+    from scripts.content_guardrails import ContentGuardrail
+except ImportError:
+    try:
+        from content_guardrails import ContentGuardrail
+    except ImportError:
+        ContentGuardrail = None
+
 
 class TextChunker:
     """Handles text chunking with various strategies"""
@@ -24,6 +33,7 @@ class TextChunker:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        self.config_path = config_path
         self.input_path = Path(self.config['paths']['intermediate']) / 'cleaned'
         self.output_path = Path(self.config['paths']['intermediate']) / 'chunks'
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -36,6 +46,18 @@ class TextChunker:
             format=self.config['logging']['format']
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Initialise content filter
+        filter_config = self.config.get('content_filter', self.config.get('guardrails', {}))
+        if filter_config.get('enabled', False) and filter_config.get('stages', {}).get('chunking', False):
+            if ContentGuardrail:
+                self.guardrail = ContentGuardrail(config_path)
+                self.logger.info("Content filtering enabled for chunking stage")
+            else:
+                self.guardrail = None
+                self.logger.warning("Content filtering requested but module not available")
+        else:
+            self.guardrail = None
     
     def split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences"""
@@ -223,6 +245,22 @@ class TextChunker:
         # Create chunk objects with metadata
         chunks = []
         for idx, chunk_text in enumerate(chunk_texts):
+            # Apply content filtering to each chunk
+            guardrail_result = None
+            if self.guardrail:
+                guardrail_result = self.guardrail.scan_and_guard(chunk_text, stage='chunking')
+                chunk_text = guardrail_result.get('text', chunk_text)
+                
+                # Skip chunk if rejected
+                if guardrail_result.get('action') == 'rejected':
+                    self.logger.info(f"Chunk {idx} from {text_file.name} rejected by content filter")
+                    continue
+                
+                # Skip if text was removed entirely
+                if not chunk_text or len(chunk_text.strip()) < 50:
+                    self.logger.info(f"Chunk {idx} from {text_file.name} too short after filtering")
+                    continue
+            
             chunk_id = str(uuid.uuid4())
             
             chunk_metadata = {
@@ -238,6 +276,14 @@ class TextChunker:
                 'word_count': self.count_words(chunk_text),
                 'char_count': len(chunk_text),
             }
+            
+            # Add filter info if applied
+            if guardrail_result:
+                chunk_metadata['filter_applied'] = True
+                chunk_metadata['filter_action'] = guardrail_result.get('action', 'none')
+                if guardrail_result.get('detected'):
+                    chunk_metadata['patterns_detected'] = True
+                    chunk_metadata['filter_confidence'] = guardrail_result.get('detection', {}).get('confidence', 0.0)
             
             chunks.append({
                 'id': chunk_id,

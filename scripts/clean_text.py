@@ -19,6 +19,15 @@ try:
 except ImportError:
     ftfy = None
 
+# Import guardrails
+try:
+    from scripts.content_guardrails import ContentGuardrail
+except ImportError:
+    try:
+        from content_guardrails import ContentGuardrail
+    except ImportError:
+        ContentGuardrail = None
+
 try:
     from langdetect import detect, LangDetectException
 except ImportError:
@@ -34,6 +43,7 @@ class TextCleaner:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        self.config_path = config_path
         self.input_path = Path(self.config['paths']['intermediate']) / 'extracted'
         self.output_path = Path(self.config['paths']['intermediate']) / 'cleaned'
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -46,6 +56,18 @@ class TextCleaner:
             format=self.config['logging']['format']
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Initialise content filter
+        filter_config = self.config.get('content_filter', self.config.get('guardrails', {}))
+        if filter_config.get('enabled', False) and filter_config.get('stages', {}).get('cleaning', False):
+            if ContentGuardrail:
+                self.guardrail = ContentGuardrail(config_path)
+                self.logger.info("Content filtering enabled for cleaning stage")
+            else:
+                self.guardrail = None
+                self.logger.warning("Content filtering requested but module not available")
+        else:
+            self.guardrail = None
     
     def fix_encoding(self, text: str) -> str:
         """Fix text encoding issues"""
@@ -150,6 +172,21 @@ class TextCleaner:
         if self.cleaning_config['min_line_length'] > 0:
             text = self.remove_short_lines(text, self.cleaning_config['min_line_length'])
         
+        # Apply content filtering
+        guardrail_result = None
+        if self.guardrail:
+            guardrail_result = self.guardrail.scan_and_guard(text, stage='cleaning')
+            text = guardrail_result.get('text', text)
+            
+            if guardrail_result.get('action') == 'rejected':
+                return {
+                    'text': None,
+                    'language': None,
+                    'success': False,
+                    'reason': 'Rejected by content filter',
+                    'filter_result': guardrail_result
+                }
+        
         # Detect language
         language = self.detect_language(text)
         
@@ -173,7 +210,7 @@ class TextCleaner:
                 'reason': 'Text too short after cleaning'
             }
         
-        return {
+        result = {
             'text': text,
             'language': language,
             'success': True,
@@ -181,6 +218,15 @@ class TextCleaner:
             'cleaned_length': cleaned_length,
             'reduction_ratio': (original_length - cleaned_length) / original_length if original_length > 0 else 0
         }
+        
+        # Add filter info if applied
+        if guardrail_result:
+            result['filter_applied'] = True
+            result['filter_action'] = guardrail_result.get('action', 'none')
+            if guardrail_result.get('detected'):
+                result['patterns_detected'] = True
+        
+        return result
     
     def process_file(self, text_file: Path, metadata_file: Path) -> Dict:
         """Process a single extracted text file"""

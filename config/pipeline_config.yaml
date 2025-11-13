@@ -29,6 +29,41 @@ cleaning:
     - "en" 
   language_confidence_threshold: 0.8
 
+# Content Filtering - Pattern-Based Text Redaction
+# Generic regex-based filtering for data cleaning and processing
+# Important: Users are responsible for ensuring compliance with applicable laws
+content_filter:
+  enabled: false  # Disabled by default - configure patterns before enabling
+  
+  # Action when patterns match
+  # Options: remove (redact sections), flag (mark for review), reject (discard text)
+  action: "flag"  # Default to flag for review
+  
+  # Pattern Configuration - Define your own regex patterns
+  patterns:
+    # Add any regex patterns you need for your use case
+    custom_patterns: []
+      # Examples:
+      # - "\\b\\d{3}-\\d{2}-\\d{4}\\b"              # SSN-like patterns
+      # - "\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"  # Email addresses
+      # - "(?i)page\\s+\\d+"                         # Page numbering
+      # - "(?i)confidential|draft"                   # Document status
+      # - "(?i)metadata_field:\\s*\\w+"             # Metadata tags
+  
+  # Context characters to include around matches (for boundary detection)
+  context_chars: 500
+  
+  # Logging
+  log_detections: true
+  log_removals: true
+  
+  # Pipeline stages where filter applies
+  stages:
+    extraction: false
+    cleaning: false
+    chunking: false
+    filtering: false
+
 # Chunking Settings
 chunking:
   method: "fixed"  # Options: sentence, paragraph, fixed

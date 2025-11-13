@@ -42,6 +42,15 @@ except ImportError:
 import yaml
 from tqdm import tqdm
 
+# Import guardrails
+try:
+    from scripts.content_guardrails import ContentGuardrail
+except ImportError:
+    try:
+        from content_guardrails import ContentGuardrail
+    except ImportError:
+        ContentGuardrail = None
+
 
 class TextExtractor:
     """Handles text extraction from various file formats"""
@@ -51,6 +60,7 @@ class TextExtractor:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        self.config_path = config_path
         self.raw_data_path = Path(self.config['paths']['raw_data'])
         self.output_path = Path(self.config['paths']['intermediate']) / 'extracted'
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -61,6 +71,18 @@ class TextExtractor:
             format=self.config['logging']['format']
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Initialise content filter
+        filter_config = self.config.get('content_filter', self.config.get('guardrails', {}))
+        if filter_config.get('enabled', False) and filter_config.get('stages', {}).get('extraction', False):
+            if ContentGuardrail:
+                self.guardrail = ContentGuardrail(config_path)
+                self.logger.info("Content filtering enabled for extraction stage")
+            else:
+                self.guardrail = None
+                self.logger.warning("Content filtering requested but module not available")
+        else:
+            self.guardrail = None
     
     def extract_pdf(self, file_path: Path) -> Optional[str]:
         """Extract text from PDF files"""
@@ -165,6 +187,16 @@ class TextExtractor:
             text = None
             file_type = 'unknown'
         
+        # Apply content filtering
+        guardrail_result = None
+        if text and self.guardrail:
+            guardrail_result = self.guardrail.scan_and_guard(text, stage='extraction')
+            text = guardrail_result.get('text', text)
+            
+            if guardrail_result.get('action') == 'rejected':
+                self.logger.warning(f"File {file_path.name} rejected by content filter")
+                text = None
+        
         # Create metadata
         metadata = {
             'source_path': str(file_path),
@@ -173,7 +205,14 @@ class TextExtractor:
             'extraction_timestamp': datetime.now().isoformat(),
             'success': text is not None,
             'text_length': len(text) if text else 0,
+            'guardrail_applied': guardrail_result is not None,
         }
+        
+        if guardrail_result:
+            metadata['filter_action'] = guardrail_result.get('action', 'none')
+            if guardrail_result.get('detected'):
+                metadata['patterns_detected'] = True
+                metadata['filter_confidence'] = guardrail_result.get('detection', {}).get('confidence', 0.0)
         
         return {
             'text': text,

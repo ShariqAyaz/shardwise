@@ -16,6 +16,15 @@ from collections import defaultdict
 import yaml
 from tqdm import tqdm
 
+# Import guardrails
+try:
+    from scripts.content_guardrails import ContentGuardrail
+except ImportError:
+    try:
+        from content_guardrails import ContentGuardrail
+    except ImportError:
+        ContentGuardrail = None
+
 try:
     from datasketch import MinHash, MinHashLSH
 except ImportError:
@@ -36,6 +45,7 @@ class DedupFilter:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        self.config_path = config_path
         self.input_path = Path(self.config['paths']['intermediate']) / 'chunks'
         self.output_path = Path(self.config['paths']['intermediate']) / 'chunks'  # In-place filtering
         
@@ -48,6 +58,18 @@ class DedupFilter:
             format=self.config['logging']['format']
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Initialise content filter
+        filter_config = self.config.get('content_filter', self.config.get('guardrails', {}))
+        if filter_config.get('enabled', False) and filter_config.get('stages', {}).get('filtering', False):
+            if ContentGuardrail:
+                self.guardrail = ContentGuardrail(config_path)
+                self.logger.info("Content filtering enabled for filtering stage")
+            else:
+                self.guardrail = None
+                self.logger.warning("Content filtering requested but module not available")
+        else:
+            self.guardrail = None
         
         # Track seen hashes
         self.seen_hashes: Set[str] = set()
@@ -229,6 +251,31 @@ class DedupFilter:
         
         text = chunk.get('text', '')
         chunk_id = chunk.get('id', str(chunk_file))
+        metadata = chunk.get('metadata', {})
+        
+        # Apply content filtering
+        if self.guardrail:
+            guardrail_result = self.guardrail.scan_and_guard(text, stage='filtering')
+            
+            if guardrail_result.get('action') == 'rejected':
+                return {
+                    'keep': False,
+                    'reason': 'Rejected by content filter'
+                }
+            
+            # Update text if modified
+            text = guardrail_result.get('text', text)
+            
+            # Update metadata with filter info
+            if guardrail_result.get('detected'):
+                metadata['filter_applied'] = True
+                metadata['filter_action'] = guardrail_result.get('action', 'none')
+                metadata['patterns_detected'] = True
+                metadata['filter_confidence'] = guardrail_result.get('detection', {}).get('confidence', 0.0)
+                
+                # Update chunk text if modified
+                chunk['text'] = text
+                chunk['metadata'] = metadata
         
         # Check minimum length
         if len(text) < self.dedup_config['min_text_length']:
