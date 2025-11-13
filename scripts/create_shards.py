@@ -82,6 +82,7 @@ class ShardCreator:
             metadata = chunk.get('metadata', {})
             quality_metrics = metadata.get('quality_metrics', {})
             
+            # Build full record with all possible columns
             record = {
                 'id': chunk.get('id'),
                 'text': chunk.get('text'),
@@ -108,7 +109,27 @@ class ShardCreator:
             
             records.append(record)
         
-        return pd.DataFrame(records)
+        df = pd.DataFrame(records)
+        
+        # Apply schema filtering if configured
+        schema_config = self.sharding_config.get('schema', {})
+        active_schema = schema_config.get('active', 'full')
+        
+        if active_schema == 'custom':
+            columns = schema_config.get('custom', list(df.columns))
+        elif active_schema in schema_config:
+            columns = schema_config[active_schema]
+        else:
+            columns = list(df.columns)  # Use all columns
+        
+        # Filter to only include columns that exist in the dataframe
+        columns = [col for col in columns if col in df.columns]
+        
+        if columns:
+            df = df[columns]
+            self.logger.info(f"Using schema: {active_schema} ({len(columns)} columns)")
+        
+        return df
     
     def save_shard(self, df: pd.DataFrame, shard_idx: int):
         """Save a DataFrame as a Parquet shard"""
@@ -144,28 +165,36 @@ class ShardCreator:
         # Convert to DataFrame
         df = self.chunks_to_dataframe(chunks)
         
-        # Calculate shard sizes
-        max_shard_size_mb = self.sharding_config['max_shard_size_mb']
+        # Determine rows per shard based on configuration
+        max_rows_per_shard = self.sharding_config.get('max_rows_per_shard')
         
-        # Estimate rows per shard based on average row size
-        # First create a small sample to estimate size
-        sample_size = min(100, len(df))
-        sample_df = df.head(sample_size)
-        
-        # Save temporary sample to estimate size
-        temp_path = self.output_path / 'temp_sample.parquet'
-        sample_df.to_parquet(temp_path, engine='pyarrow', index=False)
-        sample_size_mb = temp_path.stat().st_size / (1024 * 1024)
-        temp_path.unlink()
-        
-        # Calculate approximate rows per shard
-        avg_row_size_mb = sample_size_mb / sample_size
-        rows_per_shard = int(max_shard_size_mb / avg_row_size_mb)
-        
-        # Ensure at least 100 rows per shard
-        rows_per_shard = max(100, rows_per_shard)
-        
-        self.logger.info(f"Creating shards with approximately {rows_per_shard} rows each")
+        if max_rows_per_shard:
+            # Use configured row limit
+            rows_per_shard = max_rows_per_shard
+            self.logger.info(f"Using configured row limit: {rows_per_shard} rows per shard")
+        else:
+            # Calculate based on size limit
+            max_shard_size_mb = self.sharding_config['max_shard_size_mb']
+            
+            # Estimate rows per shard based on average row size
+            # First create a small sample to estimate size
+            sample_size = min(100, len(df))
+            sample_df = df.head(sample_size)
+            
+            # Save temporary sample to estimate size
+            temp_path = self.output_path / 'temp_sample.parquet'
+            sample_df.to_parquet(temp_path, engine='pyarrow', index=False)
+            sample_size_mb = temp_path.stat().st_size / (1024 * 1024)
+            temp_path.unlink()
+            
+            # Calculate approximate rows per shard
+            avg_row_size_mb = sample_size_mb / sample_size
+            rows_per_shard = int(max_shard_size_mb / avg_row_size_mb)
+            
+            # Ensure at least 100 rows per shard
+            rows_per_shard = max(100, rows_per_shard)
+            
+            self.logger.info(f"Creating shards with approximately {rows_per_shard} rows each (size-based)")
         
         # Create shards
         total_shards = (len(df) + rows_per_shard - 1) // rows_per_shard

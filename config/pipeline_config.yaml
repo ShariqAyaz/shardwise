@@ -26,16 +26,37 @@ cleaning:
   fix_encoding: true
   min_line_length: 10
   languages:
-    - "en"  # Filter for English only, add more as needed
+    - "en" 
   language_confidence_threshold: 0.8
 
 # Chunking Settings
 chunking:
-  method: "sentence"  # Options: sentence, paragraph, fixed
-  min_chunk_size: 500  # words
-  max_chunk_size: 2000  # words
-  overlap: 100  # words
-  preserve_sentence_boundaries: true
+  method: "fixed"  # Options: sentence, paragraph, fixed
+  
+  # Chunk size limits - FLEXIBLE, set to your needs
+  min_chunk_size: 50      # Minimum words (set 0 to disable, or increase to filter short chunks)
+  max_chunk_size: 100000  # Maximum words (set very high to allow any size, or lower to enforce limits)
+  overlap: 0              # Words to overlap between chunks (0 = no overlap, 50-200 = typical overlap)
+  
+  preserve_sentence_boundaries: false  # false for fixed blobs, true for sentence-based
+  
+  # Filtering options - control what chunks to keep
+  enforce_limits: false    # true = reject chunks outside min/max, false = keep all sizes
+  warn_on_outliers: true   # Log warnings for chunks outside expected range
+  
+  # Size recommendations based on your data analysis:
+  # Your data: 769 words average (range: 43 - 82,419 words)
+  # - 24.7% are 0-256 words (small)
+  # - 29.1% are 257-512 words (medium-small)
+  # - 28.3% are 513-1024 words (medium-large)
+  # - 17.8% are 1025+ words (large)
+  
+  # Common presets (adjust min/max above to match):
+  # Permissive (accept all):     min: 0,    max: 999999,  overlap: 0
+  # Small chunks:                 min: 100,  max: 512,     overlap: 50
+  # Medium chunks:                min: 256,  max: 1024,    overlap: 100
+  # Large chunks:                 min: 512,  max: 2048,    overlap: 150
+  # Your data profile:            min: 50,   max: 100000,  overlap: 0
 
 # Deduplication Settings
 deduplication:
@@ -46,21 +67,62 @@ deduplication:
     threshold: 0.8
   min_text_length: 50  # characters
 
-# Quality Filtering Settings
+# Quality Filtering Settings - FLEXIBLE LIMITS
 quality:
-  min_words: 20
-  max_words: 10000
-  min_unique_words_ratio: 0.3
-  max_repetition_ratio: 0.5
-  min_alpha_ratio: 0.7
-  calculate_readability: true
-  min_readability_score: 0  # Flesch reading ease, 0-100
+  # Word count limits (based on your data: 43-82,419 words, avg 769)
+  min_words: 20          # Minimum (0 = no limit, 20 = filter very short)
+  max_words: 100000      # Maximum (999999 = no limit, or set lower to enforce)
+  
+  # Quality metrics - adjust to your tolerance
+  min_unique_words_ratio: 0.0    # Vocabulary diversity (0.0 = permissive, 0.3 = strict)
+  max_repetition_ratio: 1.0      # Repetition tolerance (1.0 = allow all, 0.5 = strict)
+  min_alpha_ratio: 0.0           # Alphabetic character ratio (0.0 = allow all, 0.7 = strict)
+  
+  # Readability scoring
+  calculate_readability: false   # Set true to calculate (slower), false to skip
+  min_readability_score: 0       # Flesch reading ease, 0-100 (0 = no filter)
+  
+  # Enforcement
+  strict_filtering: false        # true = reject chunks failing quality, false = warn only
+  log_rejected_chunks: true      # Log what gets filtered out
 
-# Sharding Settings
+# Sharding Settings - FLEXIBLE SCHEMA CONTROL
 sharding:
   format: "parquet"
-  max_shard_size_mb: 500
-  compression: "snappy"  # Options: snappy, gzip, brotli, none
+  max_shard_size_mb: 500      # Maximum size per shard file (adjust as needed)
+  max_rows_per_shard: null    # Row limit per shard (null = size-based, number = fixed rows)
+  compression: "snappy"       # Options: snappy, gzip, brotli, none
+  
+  # Schema configuration - YOU DECIDE what to store
+  schema:
+    # Predefined schemas for common use cases:
+    
+    # Minimal - Pure text only (like your shard_00241.parquet)
+    minimal: ["text"]
+    
+    # Basic - Text with ID for tracking
+    basic: ["id", "text"]
+    
+    # Standard - Text + essential metadata
+    standard: ["id", "text", "source_file", "language", "word_count"]
+    
+    # Full - Everything available
+    full: ["id", "text", "source_file", "filename", "file_type", "language", 
+           "chunk_index", "word_count", "char_count", "chunking_method", 
+           "chunking_timestamp", "unique_words", "unique_ratio", 
+           "repetition_ratio", "alpha_ratio", "readability_score"]
+    
+    # ACTIVE SCHEMA - Choose what you want to store:
+    active: "minimal"  # Options: minimal, basic, standard, full, custom
+    
+    # Custom - Define your own column list
+    # Set active: "custom" and list columns below
+    custom: ["text", "word_count", "language"]
+    
+  # Advanced options
+  allow_variable_columns: true    # Allow different columns per shard
+  drop_null_columns: false        # Remove columns that are all null
+  include_metadata_file: true     # Save schema info in separate metadata file
 
 # Annotation Export Settings
 annotation:
